@@ -330,6 +330,28 @@ function PatientDetailView({
         </article>
       </section>
 
+      {/* Vitals charts */}
+      {history.length > 1 && (
+        <section className="grid gap-4 md:grid-cols-2">
+          <VitalsChart
+            title="Heart Rate"
+            unit="bpm"
+            data={history}
+            getValue={(r) => r.heartRate}
+            color="#f43f5e"
+            colorLight="rgba(244,63,94,0.15)"
+          />
+          <VitalsChart
+            title="SpO2"
+            unit="%"
+            data={history}
+            getValue={(r) => r.spo2}
+            color="#0ea5e9"
+            colorLight="rgba(14,165,233,0.15)"
+          />
+        </section>
+      )}
+
       {/* History table */}
       <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:p-5">
         <h3 className="mb-4 text-lg font-semibold text-slate-800">
@@ -384,5 +406,147 @@ function PatientDetailView({
         </div>
       </section>
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  SVG Line Chart                                                     */
+/* ------------------------------------------------------------------ */
+
+const CHART_W = 500;
+const CHART_H = 180;
+const PAD = { top: 16, right: 12, bottom: 24, left: 42 };
+
+function VitalsChart({
+  title,
+  unit,
+  data,
+  getValue,
+  color,
+  colorLight,
+}: {
+  title: string;
+  unit: string;
+  data: VitalsReading[];
+  getValue: (r: VitalsReading) => number;
+  color: string;
+  colorLight: string;
+}) {
+  const chartId = useMemo(() => `chart-${title.replace(/\s/g, "")}`, [title]);
+
+  // Take last 60 points
+  const points = useMemo(() => {
+    const slice = data.slice(-60);
+    return slice.map((r) => getValue(r));
+  }, [data, getValue]);
+
+  const { polyline, areaPath, minVal, maxVal, yTicks } = useMemo(() => {
+    if (points.length < 2) return { polyline: "", areaPath: "", minVal: 0, maxVal: 100, yTicks: [] as number[] };
+
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const padding = Math.max((max - min) * 0.15, 2);
+    const yMin = Math.floor(min - padding);
+    const yMax = Math.ceil(max + padding);
+    const range = yMax - yMin || 1;
+
+    const w = CHART_W - PAD.left - PAD.right;
+    const h = CHART_H - PAD.top - PAD.bottom;
+
+    const coords = points.map((val, i) => {
+      const x = PAD.left + (i / (points.length - 1)) * w;
+      const y = PAD.top + h - ((val - yMin) / range) * h;
+      return { x, y };
+    });
+
+    const line = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x},${c.y}`).join(" ");
+
+    // Area fill (line + close to bottom)
+    const area =
+      line +
+      ` L${coords[coords.length - 1].x},${PAD.top + h}` +
+      ` L${coords[0].x},${PAD.top + h} Z`;
+
+    // 4 y-axis tick values
+    const ticks = [0, 0.33, 0.66, 1].map((f) => Math.round(yMin + f * range));
+
+    return { polyline: line, areaPath: area, minVal: yMin, maxVal: yMax, yTicks: ticks };
+  }, [points]);
+
+  const latestVal = points.length > 0 ? points[points.length - 1] : null;
+
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-baseline justify-between">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          {title}
+        </p>
+        {latestVal !== null && (
+          <p className="text-sm font-semibold" style={{ color }}>
+            {latestVal} {unit}
+          </p>
+        )}
+      </div>
+
+      {points.length < 2 ? (
+        <p className="py-8 text-center text-sm text-slate-400">
+          Need at least 2 readings to chart
+        </p>
+      ) : (
+        <svg
+          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+          className="w-full"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient id={`${chartId}-grad`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+              <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+
+          {/* Grid lines + y labels */}
+          {yTicks.map((tick) => {
+            const range = maxVal - minVal || 1;
+            const h = CHART_H - PAD.top - PAD.bottom;
+            const y = PAD.top + h - ((tick - minVal) / range) * h;
+            return (
+              <g key={tick}>
+                <line
+                  x1={PAD.left}
+                  y1={y}
+                  x2={CHART_W - PAD.right}
+                  y2={y}
+                  stroke="#e2e8f0"
+                  strokeWidth={1}
+                />
+                <text
+                  x={PAD.left - 6}
+                  y={y + 4}
+                  textAnchor="end"
+                  fill="#94a3b8"
+                  fontSize={11}
+                >
+                  {tick}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Filled area */}
+          <path d={areaPath} fill={`url(#${chartId}-grad)`} />
+
+          {/* Line */}
+          <path
+            d={polyline}
+            fill="none"
+            stroke={color}
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+    </article>
   );
 }
