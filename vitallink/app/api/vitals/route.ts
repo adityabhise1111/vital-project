@@ -1,7 +1,6 @@
 import {
-  getLatestVitals,
+  getAllLatestVitals,
   isValidVitalsPayload,
-  PATIENT_NAME,
   updateVitals,
 } from "@/lib/vitals-store";
 
@@ -24,16 +23,7 @@ export async function POST(request: Request) {
 
   if (!isValidVitalsPayload(payload)) {
     return Response.json(
-      { error: "Payload must include name, heartRate, and spo2 as numbers" },
-      {
-        status: 400,
-      },
-    );
-  }
-
-  if (payload.name !== PATIENT_NAME) {
-    return Response.json(
-      { error: `Only patient '${PATIENT_NAME}' is supported` },
+      { error: "Payload must include name (string), heartRate (number), and spo2 (number)" },
       {
         status: 400,
       },
@@ -46,8 +36,10 @@ export async function POST(request: Request) {
 }
 
 export function GET() {
-  return Response.json({
-    patient: PATIENT_NAME,
-    latest: getLatestVitals(),
-  });
+  const map = getAllLatestVitals();
+  const patients: Record<string, unknown> = {};
+  for (const [name, reading] of map) {
+    patients[name] = reading;
+  }
+  return Response.json({ patients });
 }

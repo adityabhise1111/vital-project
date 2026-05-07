@@ -1,5 +1,3 @@
-export const PATIENT_NAME = "Ram Bhau";
-
 export type VitalsInput = {
   name: string;
   heartRate: number;
@@ -15,11 +13,23 @@ export type VitalsReading = {
 
 type VitalsListener = (reading: VitalsReading) => void;
 
-let latestVitals: VitalsReading | null = null;
+/** Latest vitals per patient, keyed by patient name */
+const latestVitalsMap = new Map<string, VitalsReading>();
 const listeners = new Set<VitalsListener>();
 
-export function getLatestVitals() {
-  return latestVitals;
+/** Returns the latest vitals for all patients */
+export function getAllLatestVitals(): Map<string, VitalsReading> {
+  return latestVitalsMap;
+}
+
+/** Returns the latest vitals for a specific patient */
+export function getLatestVitals(patientName?: string): VitalsReading | null {
+  if (patientName) {
+    return latestVitalsMap.get(patientName) ?? null;
+  }
+  // Backward compat: return first entry if no name given
+  const first = latestVitalsMap.values().next();
+  return first.done ? null : first.value;
 }
 
 export function subscribeVitals(listener: VitalsListener) {
@@ -30,17 +40,19 @@ export function subscribeVitals(listener: VitalsListener) {
   };
 }
 
-export function updateVitals(input: VitalsInput) {
-  latestVitals = {
+export function updateVitals(input: VitalsInput): VitalsReading {
+  const reading: VitalsReading = {
     ...input,
     updatedAt: new Date().toISOString(),
   };
 
+  latestVitalsMap.set(input.name, reading);
+
   for (const listener of listeners) {
-    listener(latestVitals);
+    listener(reading);
   }
 
-  return latestVitals;
+  return reading;
 }
 
 export function isValidVitalsPayload(payload: unknown): payload is VitalsInput {
@@ -52,6 +64,7 @@ export function isValidVitalsPayload(payload: unknown): payload is VitalsInput {
 
   return (
     typeof data.name === "string" &&
+    data.name.trim().length > 0 &&
     typeof data.heartRate === "number" &&
     Number.isFinite(data.heartRate) &&
     typeof data.spo2 === "number" &&

@@ -1,4 +1,4 @@
-import { getLatestVitals, subscribeVitals } from "@/lib/vitals-store";
+import { getAllLatestVitals, subscribeVitals } from "@/lib/vitals-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,9 +37,10 @@ export function GET(request: Request) {
 
       writeEvent("ready", { connected: true });
 
-      const latest = getLatestVitals();
-      if (latest) {
-        writeEvent("vitals", latest);
+      // Send all currently known patients on connect
+      const allLatest = getAllLatestVitals();
+      for (const [, reading] of allLatest) {
+        writeEvent("vitals", reading);
       }
 
       request.signal.addEventListener("abort", closeStream);
